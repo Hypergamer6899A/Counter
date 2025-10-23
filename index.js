@@ -1,4 +1,3 @@
-// index.js
 const { Client, GatewayIntentBits } = require("discord.js");
 require("dotenv").config();
 const express = require("express");
@@ -28,29 +27,25 @@ client.once("ready", () => {
 
 // --- Message Handler ---
 client.on("messageCreate", async (message) => {
-  if (message.author.bot) return; // Ignore bots
-  if (message.channel.id !== COUNTING_CHANNEL_ID) return; // Only in counting channel
+  if (message.author.bot) return;
+  if (message.channel.id !== COUNTING_CHANNEL_ID) return;
 
-  const content = message.content.trim();
-
-  // Check if the message is a valid number
-  const number = parseInt(content);
+  const number = parseInt(message.content.trim());
   if (isNaN(number)) return; // ignore non-numbers
 
-  const expectedNumber = lastNumber + 1;
+  const expected = lastNumber + 1;
 
-  // Check for double count or wrong number
-  if (message.author.id === lastUserId || number !== expectedNumber) {
+  // Invalid count
+  if (number !== expected || message.author.id === lastUserId) {
     await message.channel.send(
       `❌ Count reset! <@${message.author.id}> messed it up! Back to **1**.`
     );
 
-    // Assign roles
     try {
       const member = await message.guild.members.fetch(message.author.id);
 
       if (member.roles.cache.has(STRIKE_ROLE_ID)) {
-        // Already has strike, give ban role
+        // Already warned once — ban them from counting
         if (!member.roles.cache.has(BAN_ROLE_ID)) {
           await member.roles.add(BAN_ROLE_ID);
           await message.channel.send(
@@ -58,7 +53,7 @@ client.on("messageCreate", async (message) => {
           );
         }
       } else {
-        // Give first strike
+        // First offense — give strike
         await member.roles.add(STRIKE_ROLE_ID);
         await message.channel.send(
           `⚠️ <@${member.id}> received a strike! One more and you're out.`
@@ -68,17 +63,22 @@ client.on("messageCreate", async (message) => {
       console.error("Role assignment error:", err);
     }
 
-    // Reset the count
+    // Reset count cleanly
     lastNumber = 0;
     lastUserId = null;
     return;
   }
 
-  // Valid count
+  // ✅ Valid count
   lastNumber = number;
   lastUserId = message.author.id;
 
   await message.react("✅");
+
+  // Optional: Show current number milestone
+  if (number % 50 === 0) {
+    await message.channel.send(`🎉 Nice! The count reached **${number}**!`);
+  }
 });
 
 // --- Bot Login ---
@@ -86,20 +86,20 @@ client.login(process.env.TOKEN).catch((err) => {
   console.error("❌ Failed to login:", err);
 });
 
-// --- Express for Render Keepalive ---
+// --- Express Keepalive for Render ---
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => res.send("Counting bot is running!"));
-app.get("/health", (req, res) => {
+app.get("/health", (req, res) =>
   res.json({
     status: "ok",
     bot: client.user ? client.user.tag : "starting",
     lastNumber,
     lastUserId,
     time: new Date().toISOString(),
-  });
-});
+  })
+);
 
 app.listen(PORT, () =>
   console.log(`🌐 Web server listening on port ${PORT} (pid=${process.pid})`)
