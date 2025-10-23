@@ -73,6 +73,14 @@ client.on("messageCreate", async (message) => {
   lastNumber = number;
   lastUserId = message.author.id;
 
+// Update bot's custom status to show current count
+client.user.setPresence({
+  activities: [
+    { name: `Counting, rn at ${lastNumber}`, type: 3 } // 3 = Watching
+  ],
+  status: "online"
+});
+  
   await message.react("✅");
 
   // Optional: Show current number milestone
