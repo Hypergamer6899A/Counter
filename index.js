@@ -23,6 +23,12 @@ let lastUserId = null;
 // --- On Ready ---
 client.once("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+
+  // Initial presence
+  client.user.setPresence({
+    activities: [{ name: `Counting, rn at ${lastNumber}`, type: 3 }],
+    status: "online",
+  }).catch(console.error);
 });
 
 // --- Message Handler ---
@@ -63,9 +69,18 @@ client.on("messageCreate", async (message) => {
       console.error("Role assignment error:", err);
     }
 
-    // Reset count cleanly
+    // Reset count
     lastNumber = 0;
     lastUserId = null;
+
+    // Update bot presence after reset
+    if (client.user) {
+      client.user.setPresence({
+        activities: [{ name: `Counting paused`, type: 3 }],
+        status: "online",
+      }).catch(console.error);
+    }
+
     return;
   }
 
@@ -73,17 +88,17 @@ client.on("messageCreate", async (message) => {
   lastNumber = number;
   lastUserId = message.author.id;
 
-// Update bot's custom status to show current count
-client.user.setPresence({
-  activities: [
-    { name: `Counting, rn at ${lastNumber}`, type: 3 } // 3 = Watching
-  ],
-  status: "online"
-});
-  
+  // Update bot presence to show current count
+  if (client.user) {
+    client.user.setPresence({
+      activities: [{ name: `Counting, rn at ${lastNumber}`, type: 3 }],
+      status: "online",
+    }).catch(console.error);
+  }
+
   await message.react("✅");
 
-  // Optional: Show current number milestone
+  // Optional milestone notification
   if (number % 50 === 0) {
     await message.channel.send(`🎉 Nice! The count reached **${number}**!`);
   }
