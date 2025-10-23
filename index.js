@@ -25,10 +25,12 @@ client.once("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
   // Initial presence
-  client.user.setPresence({
-    activities: [{ name: `Counting, rn at ${lastNumber}`, type: 3 }],
-    status: "online",
-  }).catch(console.error);
+  if (client.user) {
+    client.user.setPresence({
+      activities: [{ name: `Counting, rn at ${lastNumber}`, type: 3 }],
+      status: "online",
+    });
+  }
 });
 
 // --- Message Handler ---
@@ -51,7 +53,6 @@ client.on("messageCreate", async (message) => {
       const member = await message.guild.members.fetch(message.author.id);
 
       if (member.roles.cache.has(STRIKE_ROLE_ID)) {
-        // Already warned once — ban them from counting
         if (!member.roles.cache.has(BAN_ROLE_ID)) {
           await member.roles.add(BAN_ROLE_ID);
           await message.channel.send(
@@ -59,7 +60,6 @@ client.on("messageCreate", async (message) => {
           );
         }
       } else {
-        // First offense — give strike
         await member.roles.add(STRIKE_ROLE_ID);
         await message.channel.send(
           `⚠️ <@${member.id}> received a strike! One more and you're out.`
@@ -73,12 +73,11 @@ client.on("messageCreate", async (message) => {
     lastNumber = 0;
     lastUserId = null;
 
-    // Update bot presence after reset
     if (client.user) {
       client.user.setPresence({
         activities: [{ name: `Counting paused`, type: 3 }],
         status: "online",
-      }).catch(console.error);
+      });
     }
 
     return;
@@ -88,17 +87,15 @@ client.on("messageCreate", async (message) => {
   lastNumber = number;
   lastUserId = message.author.id;
 
-  // Update bot presence to show current count
   if (client.user) {
     client.user.setPresence({
       activities: [{ name: `Counting, rn at ${lastNumber}`, type: 3 }],
       status: "online",
-    }).catch(console.error);
+    });
   }
 
   await message.react("✅");
 
-  // Optional milestone notification
   if (number % 50 === 0) {
     await message.channel.send(`🎉 Nice! The count reached **${number}**!`);
   }
@@ -109,7 +106,7 @@ client.login(process.env.TOKEN).catch((err) => {
   console.error("❌ Failed to login:", err);
 });
 
-// --- Express Keepalive for Render ---
+// --- Express Keepalive ---
 const app = express();
 const PORT = process.env.PORT || 3000;
 
