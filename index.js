@@ -2,6 +2,8 @@
 const { Client, GatewayIntentBits } = require("discord.js");
 require("dotenv").config();
 const express = require("express");
+const fs = require("fs");
+const path = require("path");
 
 // --- Discord Client ---
 const client = new Client({
@@ -16,15 +18,35 @@ const client = new Client({
 const COUNTING_CHANNEL_ID = process.env.COUNTING_CHANNEL_ID;
 const STRIKE_ROLE_ID = "1430958884033658962";
 const BAN_ROLE_ID = "1430958965558349995";
+const DATA_FILE = path.join(__dirname, "countData.json");
 
-// --- Variables ---
-let lastNumber = 0;
-let lastUserId = null;
+// --- Helper: Load/Save JSON ---
+function loadData() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+      return { lastNumber: data.lastNumber || 0, lastUserId: data.lastUserId || null };
+    }
+  } catch (err) {
+    console.error("⚠️ Failed to load countData.json:", err);
+  }
+  return { lastNumber: 0, lastUserId: null };
+}
+
+function saveData() {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify({ lastNumber, lastUserId }, null, 2));
+  } catch (err) {
+    console.error("⚠️ Failed to save countData.json:", err);
+  }
+}
+
+// --- Load existing data ---
+let { lastNumber, lastUserId } = loadData();
 
 // --- On Ready ---
 client.once("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  // Initialize presence
   client.user.setPresence({
     activities: [{ name: `Counting, rn at ${lastNumber}`, type: 3 }],
     status: "online",
@@ -33,17 +55,17 @@ client.once("ready", () => {
 
 // --- Message Handler ---
 client.on("messageCreate", async (message) => {
-  if (message.author.bot) return; // Ignore bots
-  if (message.channel.id !== COUNTING_CHANNEL_ID) return; // Only counting channel
+  if (message.author.bot) return;
+  if (message.channel.id !== COUNTING_CHANNEL_ID) return;
 
   const number = parseInt(message.content.trim());
-  if (isNaN(number)) return; // Ignore non-numbers
+  if (isNaN(number)) return;
 
   const expected = lastNumber + 1;
 
   // Invalid count
   if (number !== expected || message.author.id === lastUserId) {
-    if (message._countHandled) return; // Prevent double-processing
+    if (message._countHandled) return;
     message._countHandled = true;
 
     await message.channel.send(
@@ -54,7 +76,6 @@ client.on("messageCreate", async (message) => {
       const member = await message.guild.members.fetch(message.author.id);
 
       if (member.roles.cache.has(STRIKE_ROLE_ID)) {
-        // Already has a strike — ban them from counting
         if (!member.roles.cache.has(BAN_ROLE_ID)) {
           await member.roles.add(BAN_ROLE_ID);
           await message.channel.send(
@@ -62,7 +83,6 @@ client.on("messageCreate", async (message) => {
           );
         }
       } else {
-        // First strike
         await member.roles.add(STRIKE_ROLE_ID);
         await message.channel.send(
           `⚠️ <@${member.id}> received a strike! One more and you're out.`
@@ -72,36 +92,31 @@ client.on("messageCreate", async (message) => {
       console.error("Role assignment error:", err);
     }
 
-    // Reset count
+    // Reset
     lastNumber = 0;
     lastUserId = null;
+    saveData(); // save to file
 
-    // Update presence
-    if (client.user) {
-      client.user.setPresence({
-        activities: [{ name: `Counting paused`, type: 3 }],
-        status: "online",
-      });
-    }
+    client.user.setPresence({
+      activities: [{ name: `Counting paused`, type: 3 }],
+      status: "online",
+    });
 
-    return; // Exit early
+    return;
   }
 
   // ✅ Valid count
   lastNumber = number;
   lastUserId = message.author.id;
+  saveData(); // save to file
 
-  // Update presence
-  if (client.user) {
-    client.user.setPresence({
-      activities: [{ name: `Counting, rn at ${lastNumber}`, type: 3 }],
-      status: "online",
-    });
-  }
+  client.user.setPresence({
+    activities: [{ name: `Counting, rn at ${lastNumber}`, type: 3 }],
+    status: "online",
+  });
 
   await message.react("✅");
 
-  // Celebrate milestones
   if (number % 50 === 0) {
     await message.channel.send(`🎉 Nice! The count reached **${number}**!`);
   }
@@ -112,7 +127,7 @@ client.login(process.env.TOKEN).catch((err) => {
   console.error("❌ Failed to login:", err);
 });
 
-// --- Express Keepalive for Render ---
+// --- Express Keepalive ---
 const app = express();
 const PORT = process.env.PORT || 3000;
 
